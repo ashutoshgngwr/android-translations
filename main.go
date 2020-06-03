@@ -51,19 +51,23 @@ const (
 	// in 'values' [no suffix] directory)
 	defaultLocale = "default"
 
+	// markdownTemplate declares the template used in Markdown output format
 	markdownTemplate = `# {{ .title }}
 
-{{- $length := len .matrix }}
-{{- if eq $length 0 }}
+{{ $length := len .matrix }}
+{{- if eq $length 0 -}}
 No missing translations found.
-{{- else }}
-
+{{- else -}}
 | Name | Default Value | Missing Locales |
 | - | - | - |
 {{- range .matrix }}
 | ` + "`{{ .Name }}`" + ` | {{ .Value }} | {{ .MissingLocalesString }} |
 {{- end }}
 {{- end }}
+
+_Generated using [Android Missing Translations][1] GitHub action._
+
+[1]: https://github.com/ashutoshgngwr/android-missing-translations
 `
 )
 
