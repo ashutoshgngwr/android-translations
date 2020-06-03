@@ -135,21 +135,38 @@ func fatal(msg interface{}) {
 // findValuesFiles finds XML files in 'path/**/*/values*'. This function should be
 // compatible with cases where multiple resource directories are in use.
 func findValuesFiles(path string) ([]string, error) {
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to read directory %s", path)
+	}
+
 	valuesFiles := make([]string, 0)
-	err := filepath.Walk(path, func(filePath string, file os.FileInfo, err error) error {
+	for _, file := range files {
+		filePath := filepath.Join(path, file.Name())
 		if isGitIgnored(path, filePath) {
-			return nil
+			continue
 		}
 
-		parent := filepath.Base(filepath.Dir(filePath))
-		if strings.HasPrefix(parent, "values") {
-			valuesFiles = append(valuesFiles, filePath)
+		if file.IsDir() {
+			moreValuesFiles, err := findValuesFiles(filePath)
+			if err != nil {
+				return nil, err
+			}
+
+			valuesFiles = append(valuesFiles, moreValuesFiles...)
+		} else {
+			if isValuesFile(filePath) {
+				valuesFiles = append(valuesFiles, filePath)
+			}
 		}
+	}
 
-		return nil
-	})
+	return valuesFiles, nil
+}
 
-	return valuesFiles, errors.Wrapf(err, "unable to walk path %s", path)
+func isValuesFile(path string) bool {
+	parent := filepath.Base(filepath.Dir(path))
+	return strings.HasPrefix(parent, "values") && strings.EqualFold(".xml", filepath.Ext(path))
 }
 
 // findTranslatableStrings looks for '<string>' tags with '<resources>' tag as its root
