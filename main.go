@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -46,35 +48,15 @@ func (res stringResource) MissingLocalesString() string {
 	return strings.Join(res.MissingLocales, ", ")
 }
 
-const (
-	// defaultLocale declares the constant to identify default string resources (resources
-	// in 'values' [no suffix] directory)
-	defaultLocale = "default"
-
-	// markdownTemplate declares the template used in Markdown output format
-	markdownTemplate = `# {{ .title }}
-
-{{ $length := len .matrix }}
-{{- if eq $length 0 -}}
-No missing translations found.
-{{- else -}}
-| Name | Default Value | Missing Locales |
-| - | - | - |
-{{- range .matrix }}
-| ` + "`{{ .Name }}`" + ` | {{ .Value }} | {{ .MissingLocalesString }} |
-{{- end }}
-{{- end }}
-
-_Generated using [Android Missing Translations][1] GitHub action._
-
-[1]: https://github.com/ashutoshgngwr/android-missing-translations
-`
-)
+// defaultLocale declares the constant to identify default string resources (resources
+// in 'values' [no suffix] directory)
+const defaultLocale = "default"
 
 var (
 	projectDir    string // root directory of the Android Project
 	outputFormat  string // output format, must be one of markdown or json
 	markdownTitle string // heading for markdown content
+	githubActions bool   // if true, also call setGitHubActionsOutput to set action output
 )
 
 func init() {
@@ -82,6 +64,7 @@ func init() {
 	pflag.StringVar(&projectDir, "project-dir", ".", "Android Project's root directory")
 	pflag.StringVar(&outputFormat, "output-format", "json", "Output format. Must be 'json' or 'markdown'")
 	pflag.StringVar(&markdownTitle, "markdown-title", "Missing Translations", "Title for the Markdown content")
+	pflag.BoolVar(&githubActions, "github-actions", false, "Indicates if the runtime is GitHub Actions")
 	pflag.Parse()
 
 	if outputFormat != "json" && outputFormat != "markdown" {
@@ -124,28 +107,22 @@ func main() {
 		}
 	}
 
+	var output string
 	switch outputFormat {
 	case "json":
-		content, err := json.Marshal(missingTranslations)
-		if err != nil {
-			fatal("unable to marshal missing translations data into JSON")
-		}
-
-		fmt.Println(string(content))
+		output = mustRenderJSON(missingTranslations)
 		break
 	case "markdown":
-		mdTemplate := template.Must(template.New("markdown").Parse(markdownTemplate))
-		data := map[string]interface{}{
-			"title":  markdownTitle,
-			"matrix": missingTranslations,
-		}
-
-		err = mdTemplate.Execute(os.Stdout, data)
-		if err != nil {
-			fatal(err)
-		}
+		output = mustRenderMarkdown(markdownTitle, missingTranslations)
 		break
 	}
+
+	if githubActions {
+		setGitHubActionsOutput("report", output)
+		fmt.Println()
+	}
+
+	fmt.Println(output)
 }
 
 // fatal is a convenience function that calls 'fmt.Println' with 'msg' followed by an
@@ -258,4 +235,70 @@ func isGitIgnored(workingDir, file string) bool {
 	}
 
 	return true
+}
+
+func mustRenderJSON(v interface{}) string {
+	content, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		panic(errors.Wrap(err, "failed to marshal content as JSON"))
+	}
+
+	return string(content)
+}
+
+func mustRenderMarkdown(title string, data []stringResource) string {
+	mdTemplate, err := template.New("markdown").Parse(`# {{ .title }}
+
+{{ if eq .length 0 -}}
+No missing translations found.
+{{ else -}}
+{{ .table }}
+{{- end }}
+_Generated using [Android Missing Translations][1] GitHub action._
+
+[1]: https://github.com/ashutoshgngwr/android-missing-translations
+`)
+
+	var content bytes.Buffer
+	err = mdTemplate.Execute(&content, map[string]interface{}{
+		"title":  title,
+		"length": len(data),
+		"table":  renderMarkdownTable(data),
+	})
+
+	if err != nil {
+		panic(errors.Wrap(err, "unable to render data as markdown"))
+	}
+
+	return content.String()
+}
+
+func renderMarkdownTable(data []stringResource) string {
+	var tableContent bytes.Buffer
+	table := tablewriter.NewWriter(&tableContent)
+	table.SetBorders(tablewriter.Border{Left: true, Right: true})
+	table.SetCenterSeparator("|")
+	table.SetHeader([]string{"#", "Name", "Default Value", "Missing Locales"})
+	for i, item := range data {
+		table.Append(
+			[]string{
+				fmt.Sprintf("%d", 1+i),
+				fmt.Sprintf("`%s`", item.Name),
+				item.Value,
+				item.MissingLocalesString(),
+			},
+		)
+	}
+
+	table.Render()
+	return tableContent.String()
+}
+
+func setGitHubActionsOutput(key, value string) {
+	value = strings.ReplaceAll(value, "%", "%25")
+	value = strings.ReplaceAll(value, "\r", "%0D")
+	value = strings.ReplaceAll(value, "\n", "%0A")
+	value = strings.ReplaceAll(value, ":", "%3A")
+	value = strings.ReplaceAll(value, ",", "%2C")
+	fmt.Printf("::set-output name=%s::%s\n", key, value)
 }
