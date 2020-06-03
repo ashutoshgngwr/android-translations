@@ -309,7 +309,5 @@ func setGitHubActionsOutput(key, value string) {
 	value = strings.ReplaceAll(value, "%", "%25")
 	value = strings.ReplaceAll(value, "\r", "%0D")
 	value = strings.ReplaceAll(value, "\n", "%0A")
-	value = strings.ReplaceAll(value, ":", "%3A")
-	value = strings.ReplaceAll(value, ",", "%2C")
 	fmt.Printf("::set-output name=%s::%s\n", key, value)
 }
