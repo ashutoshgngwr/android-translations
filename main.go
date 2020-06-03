@@ -61,6 +61,10 @@ func init() {
 	pflag.StringVar(&outputFormat, "output-format", "json", "Output format. Must be 'json' or 'markdown'")
 	pflag.StringVar(&markdownTitle, "markdown-title", "Missing Translations", "Title for the Markdown content")
 	pflag.Parse()
+
+	if outputFormat != "json" && outputFormat != "markdown" {
+		fatal(fmt.Sprintf("unknow output format %s", outputFormat))
+	}
 }
 
 func main() {
@@ -120,8 +124,6 @@ func main() {
 			fatal(err)
 		}
 		break
-	default:
-		fatal(fmt.Sprintf("unknow output format %s", outputFormat))
 	}
 }
 
