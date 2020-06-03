@@ -1,0 +1,35 @@
+name: Android Missing Translations
+author: ashutoshgngwr
+description: >-
+  GitHub action to find missing translations for existing locales in Android
+  projects.
+inputs:
+  projectDir:
+    description: Android Project's root directory
+    required: false
+    default: .
+  outputFormat:
+    description: Output format. Must be one of 'json' or 'markdown'
+    required: false
+    default: markdown
+  markdownTitle:
+    description: >-
+      Title for the Markdown content. Only used if Markdown format is being
+      used
+    required: false
+    default: Missing Translations
+outputs:
+  report:
+    description: >-
+      Content with missing translations report for strings in requested format.
+runs:
+  using: docker
+  image: docker://ashutoshgngwr/android-missing-translations:master
+  args:
+    - --project-dir=${{ inputs.projectDir }}
+    - --output-format=${{ inputs.outputFormat }}
+    - --markdow-title=${{ inputs.markdownTitle }}
+    - --github-actions
+branding:
+  color: yellow
+  icon: type
