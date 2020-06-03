@@ -164,6 +164,9 @@ func findValuesFiles(path string) ([]string, error) {
 	return valuesFiles, nil
 }
 
+// isValuesFile checks the prefix on the parent of the given path. It also checks
+// the file extension of the path. If the prefix equals 'values' and file extension
+// equals 'xml', it returns true. False otherwise.
 func isValuesFile(path string) bool {
 	parent := filepath.Base(filepath.Dir(path))
 	return strings.HasPrefix(parent, "values") && strings.EqualFold(".xml", filepath.Ext(path))
@@ -237,6 +240,8 @@ func isGitIgnored(workingDir, file string) bool {
 	return true
 }
 
+// mustRenderJSON marshals the given value as JSON. It panics on encountering an error
+// while marshaling JSON.
 func mustRenderJSON(v interface{}) string {
 	content, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -246,6 +251,8 @@ func mustRenderJSON(v interface{}) string {
 	return string(content)
 }
 
+// mustRenderMarkdown tries render markdown content using on a const template.
+// If there is an error when rendering the template, it panics.
 func mustRenderMarkdown(title string, data []stringResource) string {
 	mdTemplate, err := template.New("markdown").Parse(`# {{ .title }}
 
@@ -273,6 +280,8 @@ _Generated using [Android Missing Translations][1] GitHub action._
 	return content.String()
 }
 
+// renderMarkdownTable pretty prints the slice of stringResource as Markdown
+// table to be used with Markdown format.
 func renderMarkdownTable(data []stringResource) string {
 	var tableContent bytes.Buffer
 	table := tablewriter.NewWriter(&tableContent)
@@ -294,6 +303,8 @@ func renderMarkdownTable(data []stringResource) string {
 	return tableContent.String()
 }
 
+// setGitHubActionsOutput sets the output variable for Github Actions runtime.
+// This output can be used by other steps in a workflow.
 func setGitHubActionsOutput(key, value string) {
 	value = strings.ReplaceAll(value, "%", "%25")
 	value = strings.ReplaceAll(value, "\r", "%0D")
