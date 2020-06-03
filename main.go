@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -25,23 +26,40 @@ type stringResources struct {
 // values XML files.
 type stringResource struct {
 	Name         string `xml:"name,attr"`
+	Value        string `xml:",chardata"`
 	Translatable string `xml:"translatable,attr"`
 	Locale       string `xml:"-"`
 }
 
 // localeStringsMap declares the type to map locales => string_name => stringResource
-type localeStringsMap map[string]map[string]*stringResource
+type localeStringsMap map[string]map[string]stringResource
 
-// defaultLocale declares the constant to identify default string resources (resources
-// in 'values' [no suffix] directory)
-const defaultLocale = "default"
+const (
+	// defaultLocale declares the constant to identify default string resources (resources
+	// in 'values' [no suffix] directory)
+	defaultLocale = "default"
+
+	markdownTemplate = `# {{ .title }}
+
+| Name | Default Value | Missing Locales |
+| - | - | - |
+{{- range .matrix }}
+| ` + "`{{ .name }}`" + ` | {{ .value }} | {{ .missing_locales }} |
+{{- end }}
+`
+)
 
 var (
-	projectDir string // root directory of the Android Project
+	projectDir    string // root directory of the Android Project
+	outputFormat  string // output format, must be one of markdown or json
+	markdownTitle string // heading for markdown content
 )
 
 func init() {
+	pflag.CommandLine.SortFlags = false
 	pflag.StringVar(&projectDir, "project-dir", ".", "Android Project's root directory")
+	pflag.StringVar(&outputFormat, "output-format", "json", "Output format. Must be 'json' or 'markdown'")
+	pflag.StringVar(&markdownTitle, "markdown-title", "Missing Translations", "Title for the Markdown content")
 	pflag.Parse()
 }
 
@@ -61,21 +79,50 @@ func main() {
 		fatal("unable to find string resources for default locale")
 	}
 
-	missingTranslations := map[string][]string{}
-	for str := range defaultStrings {
+	missingTranslations := []map[string]string{}
+	for name := range defaultStrings {
+		str := map[string]string{
+			"name":            name,
+			"value":           defaultStrings[name].Value,
+			"missing_locales": "",
+		}
+
 		for locale := range localeStrings {
-			if _, ok := localeStrings[locale][str]; !ok {
-				missingTranslations[str] = append(missingTranslations[str], locale)
+			if _, ok := localeStrings[locale][name]; !ok {
+				str["missing_locales"] += fmt.Sprintf(", %s", locale)
 			}
+		}
+
+		if len(str["missing_locales"]) > 0 {
+			str["missing_locales"] = str["missing_locales"][2:] // remove leading comma and space
+			missingTranslations = append(missingTranslations, str)
 		}
 	}
 
-	content, err := json.Marshal(missingTranslations)
-	if err != nil {
-		fatal("unable to marshal missing translations data into JSON")
-	}
+	switch outputFormat {
+	case "json":
+		content, err := json.Marshal(missingTranslations)
+		if err != nil {
+			fatal("unable to marshal missing translations data into JSON")
+		}
 
-	fmt.Println(string(content))
+		fmt.Println(string(content))
+		break
+	case "markdown":
+		mdTemplate := template.Must(template.New("markdown").Parse(markdownTemplate))
+		data := map[string]interface{}{
+			"title":  markdownTitle,
+			"matrix": missingTranslations,
+		}
+
+		err = mdTemplate.Execute(os.Stdout, data)
+		if err != nil {
+			fatal(err)
+		}
+		break
+	default:
+		fatal(fmt.Sprintf("unknow output format %s", outputFormat))
+	}
 }
 
 // fatal is a convenience function that calls 'fmt.Println' with 'msg' followed by an
@@ -128,10 +175,10 @@ func findTranslatableStrings(files []string) (localeStringsMap, error) {
 		for _, str := range resources.Strings {
 			if !strings.EqualFold(str.Translatable, "false") {
 				if _, ok := strResources[locale]; !ok {
-					strResources[locale] = map[string]*stringResource{}
+					strResources[locale] = map[string]stringResource{}
 				}
 
-				strResources[locale][str.Name] = &str
+				strResources[locale][str.Name] = str
 			}
 		}
 	}
