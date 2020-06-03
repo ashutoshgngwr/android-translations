@@ -15,16 +15,16 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// stringResources declares data structure for unmarshalling 'resources' tag in
+// xmlStringResources declares data structure for unmarshalling 'resources' tag in
 // Android values XML files.
-type stringResources struct {
+type xmlStringResources struct {
 	xml.Name `xml:"resources"`
-	Strings  []stringResource `xml:"string"`
+	Strings  []xmlStringResource `xml:"string"`
 }
 
-// stringResource declares data structure for unmarshalling 'string' tags in Android
+// xmlStringResource declares data structure for unmarshalling 'string' tags in Android
 // values XML files.
-type stringResource struct {
+type xmlStringResource struct {
 	Name         string `xml:"name,attr"`
 	Value        string `xml:",chardata"`
 	Translatable string `xml:"translatable,attr"`
@@ -32,7 +32,19 @@ type stringResource struct {
 }
 
 // localeStringsMap declares the type to map locales => string_name => stringResource
-type localeStringsMap map[string]map[string]stringResource
+type localeStringsMap map[string]map[string]xmlStringResource
+
+// stringResource declares the output structure for a single string resource.
+type stringResource struct {
+	Name           string   `json:"name"`
+	Value          string   `json:"value"`
+	MissingLocales []string `json:"missing_locales"`
+}
+
+// MissingLocalesString joins the MissingLocales slice using ", " separator
+func (res stringResource) MissingLocalesString() string {
+	return strings.Join(res.MissingLocales, ", ")
+}
 
 const (
 	// defaultLocale declares the constant to identify default string resources (resources
@@ -41,10 +53,16 @@ const (
 
 	markdownTemplate = `# {{ .title }}
 
+{{- $length := len .matrix }}
+{{- if eq $length 0 }}
+No missing translations found.
+{{- else }}
+
 | Name | Default Value | Missing Locales |
 | - | - | - |
 {{- range .matrix }}
-| ` + "`{{ .name }}`" + ` | {{ .value }} | {{ .missing_locales }} |
+| ` + "`{{ .Name }}`" + ` | {{ .Value }} | {{ .MissingLocalesString }} |
+{{- end }}
 {{- end }}
 `
 )
@@ -83,23 +101,22 @@ func main() {
 		fatal("unable to find string resources for default locale")
 	}
 
-	missingTranslations := []map[string]string{}
-	for name := range defaultStrings {
-		str := map[string]string{
-			"name":            name,
-			"value":           defaultStrings[name].Value,
-			"missing_locales": "",
+	missingTranslations := make([]stringResource, 0)
+	for _, str := range defaultStrings {
+		strResource := stringResource{
+			Name:           str.Name,
+			Value:          str.Value,
+			MissingLocales: make([]string, 0),
 		}
 
 		for locale := range localeStrings {
-			if _, ok := localeStrings[locale][name]; !ok {
-				str["missing_locales"] += fmt.Sprintf(", %s", locale)
+			if _, ok := localeStrings[locale][str.Name]; !ok {
+				strResource.MissingLocales = append(strResource.MissingLocales, locale)
 			}
 		}
 
-		if len(str["missing_locales"]) > 0 {
-			str["missing_locales"] = str["missing_locales"][2:] // remove leading comma and space
-			missingTranslations = append(missingTranslations, str)
+		if len(strResource.MissingLocales) > 0 {
+			missingTranslations = append(missingTranslations, strResource)
 		}
 	}
 
@@ -184,7 +201,7 @@ func findTranslatableStrings(files []string) (localeStringsMap, error) {
 			return nil, errors.Wrapf(err, "unable to read file at %s", file)
 		}
 
-		resources := &stringResources{}
+		resources := &xmlStringResources{}
 		err = xml.Unmarshal(content, resources)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to parse XML file at %s", file)
@@ -194,7 +211,7 @@ func findTranslatableStrings(files []string) (localeStringsMap, error) {
 		for _, str := range resources.Strings {
 			if !strings.EqualFold(str.Translatable, "false") {
 				if _, ok := strResources[locale]; !ok {
-					strResources[locale] = map[string]stringResource{}
+					strResources[locale] = map[string]xmlStringResource{}
 				}
 
 				strResources[locale][str.Name] = str
