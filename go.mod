@@ -1,4 +1,4 @@
-module github.com/ashutoshgngwr/android-missing-translations
+module github.com/ashutoshgngwr/android-translations
 
 go 1.14
 

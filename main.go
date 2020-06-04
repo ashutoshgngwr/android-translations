@@ -82,7 +82,7 @@ func init() {
 	pflag.StringVar(&projectDir, "project-dir", ".", "Android Project's root directory")
 	pflag.BoolVar(&outdatedLocales, "outdated-locales", true, "If true, find potentially outdated translations")
 	pflag.StringVar(&outputFormat, "output-format", "json", "Output format. Must be 'json' or 'markdown'")
-	pflag.StringVar(&markdownTitle, "markdown-title", "Missing Translations", "Title for the Markdown content")
+	pflag.StringVar(&markdownTitle, "markdown-title", "Android Translations", "Title for the Markdown content")
 	pflag.BoolVar(&githubActions, "github-actions", false, "Indicates if the runtime is GitHub Actions")
 	pflag.Parse()
 
@@ -291,9 +291,9 @@ No missing {{- if eq .outdated_on true }} or outdated {{- end }} translations fo
 {{ else -}}
 {{ .table }}
 {{- end }}
-_Generated using [Android Missing Translations][1] GitHub action._
+_Generated using [Android Translations][1] GitHub action._
 
-[1]: https://github.com/ashutoshgngwr/android-missing-translations
+[1]: https://github.com/ashutoshgngwr/android-translations
 `)
 
 	var content bytes.Buffer

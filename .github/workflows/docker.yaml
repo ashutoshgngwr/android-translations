@@ -10,7 +10,7 @@ on:
       - "**.md"
 
 env:
-  docker-tag: ashutoshgngwr/android-missing-translations:$(echo $GITHUB_REF | sed -e "s/refs\/tags\///g" -e "s/refs\/heads\///g")
+  docker-tag: ashutoshgngwr/android-translations:$(echo $GITHUB_REF | sed -e "s/refs\/tags\///g" -e "s/refs\/heads\///g")
 
 jobs:
   build-base:

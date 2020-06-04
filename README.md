@@ -1,10 +1,10 @@
-# Android Missing Translations
+# Android Translations
 
-![Docker](https://github.com/ashutoshgngwr/android-missing-translations/workflows/Docker/badge.svg)
-![Docker image size](https://img.shields.io/docker/image-size/ashutoshgngwr/android-missing-translations?sort=semver)
+![Docker](https://github.com/ashutoshgngwr/android-translations/workflows/Docker/badge.svg)
+![Docker image size](https://img.shields.io/docker/image-size/ashutoshgngwr/android-translations?sort=semver)
 
-A GitHub Action to find the missing translations for existing locales in an
-Android Project.
+A GitHub Action to find the missing and _potentially_ outdated translations
+for existing locales in an Android Project.
 
 This action is the same as running the following but with a few exceptions
 
@@ -13,6 +13,7 @@ This action is the same as running the following but with a few exceptions
    data
 3. It's not easy to [run the standalone lint tool on a Gradle project
    ](https://stackoverflow.com/q/62149318/2410641)
+4. It checks Git blame to find outdated translations
 
 ```sh
 ${ANDROID_HOME}/tools/bin/lint --check MissingTranslation ${PROJECT_DIR}
@@ -21,6 +22,7 @@ ${ANDROID_HOME}/tools/bin/lint --check MissingTranslation ${PROJECT_DIR}
 ## Features
 
 - Almost zero config
+- Find outdated translations
 - Generate reports in Markdown or JSON format
 - Usable in other CI environments
 
@@ -41,26 +43,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - id: missing_translations
-        uses: ashutoshgngwr/android-missing-translations@v1
+      - id: check_translations
+        uses: ashutoshgngwr/android-translations@v1
         with:
           projectDir: ./
       - name: Add comment
         uses: peter-evans/create-or-update-comment@v1
         with:
           issue-number: 1
-          body: ${{ steps.missing_translations.outputs.report }}
+          body: ${{ steps.check_translations.outputs.report }}
 ```
 
 ### Input
 
 The action can accept the following input parameters
 
-| Key             | Description                                         | Default Value          |
-| --------------- | --------------------------------------------------- | ---------------------- |
-| `projectDir`    | Android Project's root directory                    | `.`                    |
-| `outputFormat`  | Must be one of `json` or `markdown`                 | `markdown`             |
-| `markdownTitle` | Title for the Markdown content (not used with JSON) | `Missing Translations` |
+| Key               | Description                                          | Default Value          |
+| ----------------- | ---------------------------------------------------- | ---------------------- |
+| `projectDir`      | Android Project's root directory                     | `.`                    |
+| `outdatedLocales` | If true, also find potentially outdated translations | `true`                 |
+| `outputFormat`    | Must be one of `json` or `markdown`                  | `markdown`             |
+| `markdownTitle`   | Title for the Markdown content (not used with JSON)  | `Missing Translations` |
 
 ### Output
 
@@ -85,6 +88,9 @@ The following structure is used while generating JSON reports.
     "missing_locales": [
       "hi",
       "ru-RU"
+    ],
+    "outdated_locales": [
+      "de"
     ]
   },
   "...more of the same stuff..."
@@ -93,9 +99,11 @@ The following structure is used while generating JSON reports.
 
 ### Using Without GitHub Actions
 
+**Caution:** The action is designed to run on projects that are part of a Git repository.
+
 ```sh
 docker run --rm --workdir /app --mount type=bind,source="$(pwd)",target=/app \
-   ashutoshgngwr/android-missing-translations:v1 --output-format=json
+   ashutoshgngwr/android-translations:v1 --output-format=json
 ```
 
 ## License
