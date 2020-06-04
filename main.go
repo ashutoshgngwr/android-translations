@@ -146,7 +146,7 @@ func main() {
 // fatal is a convenience function that calls 'fmt.Println' with 'msg' followed by an
 // 'os.Exit(1)' invocation.
 func fatal(msg interface{}) {
-	fmt.Println("warning:", msg)
+	fmt.Fprintln(os.Stderr, "error:", msg)
 	os.Exit(1)
 }
 
@@ -222,7 +222,7 @@ func findTranslatableStrings(files []string) (localeStringsMap, error) {
 				}
 
 				if err != nil {
-					fmt.Println("error:", err)
+					fmt.Fprintln(os.Stderr, "warning:", err)
 					str.LastModified = time.Now()
 				}
 
