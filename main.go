@@ -70,15 +70,17 @@ func (res stringResource) OutdatedLocalesString() string {
 const defaultLocale = "default"
 
 var (
-	projectDir    string // root directory of the Android Project
-	outputFormat  string // output format, must be one of markdown or json
-	markdownTitle string // heading for markdown content
-	githubActions bool   // if true, also call setGitHubActionsOutput to set action output
+	projectDir      string // root directory of the Android Project
+	outdatedLocales bool   // if true, also print potentially outdated locales
+	outputFormat    string // output format, must be one of markdown or json
+	markdownTitle   string // heading for markdown content
+	githubActions   bool   // if true, also call setGitHubActionsOutput to set action output
 )
 
 func init() {
 	pflag.CommandLine.SortFlags = false
 	pflag.StringVar(&projectDir, "project-dir", ".", "Android Project's root directory")
+	pflag.BoolVar(&outdatedLocales, "outdated-locales", true, "If true, find potentially outdated translations")
 	pflag.StringVar(&outputFormat, "output-format", "json", "Output format. Must be 'json' or 'markdown'")
 	pflag.StringVar(&markdownTitle, "markdown-title", "Missing Translations", "Title for the Markdown content")
 	pflag.BoolVar(&githubActions, "github-actions", false, "Indicates if the runtime is GitHub Actions")
@@ -285,7 +287,7 @@ func mustRenderMarkdown(title string, data []stringResource) string {
 	mdTemplate, err := template.New("markdown").Parse(`# {{ .title }}
 
 {{ if eq .length 0 -}}
-No missing translations found.
+No missing {{- if eq .outdated_on true }} or outdated {{- end }} translations found.
 {{ else -}}
 {{ .table }}
 {{- end }}
@@ -296,9 +298,10 @@ _Generated using [Android Missing Translations][1] GitHub action._
 
 	var content bytes.Buffer
 	err = mdTemplate.Execute(&content, map[string]interface{}{
-		"title":  title,
-		"length": len(data),
-		"table":  renderMarkdownTable(data),
+		"title":       title,
+		"length":      len(data),
+		"outdated_on": outdatedLocales,
+		"table":       renderMarkdownTable(data),
 	})
 
 	if err != nil {
@@ -315,17 +318,26 @@ func renderMarkdownTable(data []stringResource) string {
 	table := tablewriter.NewWriter(&tableContent)
 	table.SetBorders(tablewriter.Border{Left: true, Right: true})
 	table.SetCenterSeparator("|")
-	table.SetHeader([]string{"#", "Name", "Default Value", "Missing Locales", "Potentially Outdated Locales"})
+
+	header := []string{"#", "Name", "Default Value", "Missing Locales"}
+	if outdatedLocales {
+		header = append(header, "Potentially Outdated Locales")
+	}
+
+	table.SetHeader(header)
 	for i, item := range data {
-		table.Append(
-			[]string{
-				fmt.Sprintf("%d", 1+i),
-				fmt.Sprintf("`%s`", item.Name),
-				item.Value,
-				item.MissingLocalesString(),
-				item.OutdatedLocalesString(),
-			},
-		)
+		row := []string{
+			fmt.Sprintf("%d", 1+i),
+			fmt.Sprintf("`%s`", item.Name),
+			item.Value,
+			item.MissingLocalesString(),
+		}
+
+		if outdatedLocales {
+			row = append(row, item.OutdatedLocalesString())
+		}
+
+		table.Append(row)
 	}
 
 	table.Render()
