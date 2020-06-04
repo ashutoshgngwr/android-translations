@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - id: missing_translations
-        uses: ashutoshgngwr/android-missing-translations@master
+        uses: ashutoshgngwr/android-missing-translations@v1
         with:
           projectDir: ./
       - name: Add comment

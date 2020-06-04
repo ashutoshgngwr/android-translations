@@ -24,7 +24,7 @@ outputs:
       Content with missing translations report for strings in requested format.
 runs:
   using: docker
-  image: docker://ashutoshgngwr/android-missing-translations:master
+  image: docker://ashutoshgngwr/android-missing-translations:v1
   args:
     - --project-dir=${{ inputs.projectDir }}
     - --output-format=${{ inputs.outputFormat }}
