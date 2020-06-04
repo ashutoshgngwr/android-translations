@@ -9,8 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
@@ -27,10 +29,11 @@ type xmlStringResources struct {
 // xmlStringResource declares data structure for unmarshalling 'string' tags in Android
 // values XML files.
 type xmlStringResource struct {
-	Name         string `xml:"name,attr"`
-	Value        string `xml:",chardata"`
-	Translatable string `xml:"translatable,attr"`
-	Locale       string `xml:"-"`
+	Name         string    `xml:"name,attr"`
+	Value        string    `xml:",chardata"`
+	Translatable string    `xml:"translatable,attr"`
+	Locale       string    `xml:"-"`
+	LastModified time.Time `xml:"-"`
 }
 
 // localeStringsMap declares the type to map locales => string_name => stringResource
@@ -38,14 +41,28 @@ type localeStringsMap map[string]map[string]xmlStringResource
 
 // stringResource declares the output structure for a single string resource.
 type stringResource struct {
-	Name           string   `json:"name"`
-	Value          string   `json:"value"`
-	MissingLocales []string `json:"missing_locales"`
+	Name            string   `json:"name"`
+	Value           string   `json:"value"`
+	MissingLocales  []string `json:"missing_locales"`
+	OutdatedLocales []string `json:"outdated_locales"`
 }
 
 // MissingLocalesString joins the MissingLocales slice using ", " separator
 func (res stringResource) MissingLocalesString() string {
+	if len(res.MissingLocales) == 0 {
+		return "-"
+	}
+
 	return strings.Join(res.MissingLocales, ", ")
+}
+
+// OutdatesLocalesString joins the OutdatesLocales slice using ", " separator
+func (res stringResource) OutdatedLocalesString() string {
+	if len(res.OutdatedLocales) == 0 {
+		return "-"
+	}
+
+	return strings.Join(res.OutdatedLocales, ", ")
 }
 
 // defaultLocale declares the constant to identify default string resources (resources
@@ -88,32 +105,33 @@ func main() {
 		fatal("unable to find string resources for default locale")
 	}
 
-	missingTranslations := make([]stringResource, 0)
+	report := make([]stringResource, 0)
 	for _, str := range defaultStrings {
 		strResource := stringResource{
-			Name:           str.Name,
-			Value:          str.Value,
-			MissingLocales: make([]string, 0),
+			Name:  str.Name,
+			Value: strings.TrimSpace(str.Value),
 		}
 
 		for locale := range localeStrings {
-			if _, ok := localeStrings[locale][str.Name]; !ok {
+			if localeStr, ok := localeStrings[locale][str.Name]; !ok {
 				strResource.MissingLocales = append(strResource.MissingLocales, locale)
+			} else if localeStr.LastModified.Before(str.LastModified) {
+				strResource.OutdatedLocales = append(strResource.OutdatedLocales, locale)
 			}
 		}
 
-		if len(strResource.MissingLocales) > 0 {
-			missingTranslations = append(missingTranslations, strResource)
+		if len(strResource.MissingLocales)+len(strResource.OutdatedLocales) > 0 {
+			report = append(report, strResource)
 		}
 	}
 
 	var output string
 	switch outputFormat {
 	case "json":
-		output = mustRenderJSON(missingTranslations)
+		output = mustRenderJSON(report)
 		break
 	case "markdown":
-		output = mustRenderMarkdown(markdownTitle, missingTranslations)
+		output = mustRenderMarkdown(markdownTitle, report)
 		break
 	}
 
@@ -128,7 +146,7 @@ func main() {
 // fatal is a convenience function that calls 'fmt.Println' with 'msg' followed by an
 // 'os.Exit(1)' invocation.
 func fatal(msg interface{}) {
-	fmt.Println("error:", msg)
+	fmt.Println("warning:", msg)
 	os.Exit(1)
 }
 
@@ -196,6 +214,16 @@ func findTranslatableStrings(files []string) (localeStringsMap, error) {
 			if !strings.EqualFold(str.Translatable, "false") {
 				if _, ok := strResources[locale]; !ok {
 					strResources[locale] = map[string]xmlStringResource{}
+				}
+
+				start, count, err := getLineRange(content, str.Value)
+				if err == nil {
+					str.LastModified, err = getLastModifiedTime(file, start, count)
+				}
+
+				if err != nil {
+					fmt.Println("error:", err)
+					str.LastModified = time.Now()
 				}
 
 				strResources[locale][str.Name] = str
@@ -287,7 +315,7 @@ func renderMarkdownTable(data []stringResource) string {
 	table := tablewriter.NewWriter(&tableContent)
 	table.SetBorders(tablewriter.Border{Left: true, Right: true})
 	table.SetCenterSeparator("|")
-	table.SetHeader([]string{"#", "Name", "Default Value", "Missing Locales"})
+	table.SetHeader([]string{"#", "Name", "Default Value", "Missing Locales", "Potentially Outdated Locales"})
 	for i, item := range data {
 		table.Append(
 			[]string{
@@ -295,6 +323,7 @@ func renderMarkdownTable(data []stringResource) string {
 				fmt.Sprintf("`%s`", item.Name),
 				item.Value,
 				item.MissingLocalesString(),
+				item.OutdatedLocalesString(),
 			},
 		)
 	}
@@ -310,4 +339,45 @@ func setGitHubActionsOutput(key, value string) {
 	value = strings.ReplaceAll(value, "\r", "%0D")
 	value = strings.ReplaceAll(value, "\n", "%0A")
 	fmt.Printf("::set-output name=%s::%s\n", key, value)
+}
+
+// getLastModifiedTime returns the last modified time of the given line range in the
+// given file using 'git blame'.
+func getLastModifiedTime(file string, lineStart, lineCount int) (time.Time, error) {
+	const errFmt = "unable to find last modified time, file: %q, start: %d, count: %d"
+	const cmdFmt = "git blame -p -L %d,+%d %s | grep committer-time | grep -oP '[\\d]+$'"
+
+	var stdoutBuffer bytes.Buffer
+	command := fmt.Sprintf(cmdFmt, lineStart, lineCount, filepath.Base(file))
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Dir = filepath.Dir(file)
+	cmd.Stdout = &stdoutBuffer
+	if err := cmd.Run(); err != nil {
+		return time.Time{}, errors.Wrapf(err, errFmt, file, lineStart, lineCount)
+	}
+
+	timestamp, err := strconv.ParseInt(strings.TrimSpace(stdoutBuffer.String()), 10, 64)
+	if err != nil {
+		return time.Time{}, errors.Wrapf(err, errFmt, file, lineStart, lineCount)
+	}
+
+	return time.Unix(timestamp, 0), nil
+}
+
+// getLineRange returns the line range of the first occurrence of 'searchTerm' in
+// 'content'. 'searchTerm' can be a multiline string. It returns the following
+// positional values
+// 1. start: line number where searchTerm occurrence started
+// 2. count: total line count of the searchTerm itself.
+// 3. error: if the there was error in reading the file or find the search term
+func getLineRange(fileContent []byte, searchTerm string) (int, int, error) {
+	chunks := strings.Split(string(fileContent), searchTerm)
+	if len(chunks) < 2 {
+		const errFmt = "searchTerm: %q is not found"
+		return 0, 0, fmt.Errorf(errFmt, searchTerm)
+	}
+
+	start := 1 + strings.Count(chunks[0], "\n")
+	count := 1 + strings.Count(searchTerm, "\n")
+	return start, count, nil
 }
