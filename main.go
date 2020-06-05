@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"text/template"
@@ -64,6 +65,14 @@ func (res stringResource) OutdatedLocalesString() string {
 
 	return strings.Join(res.OutdatedLocales, ", ")
 }
+
+// stringResources is a named type for stringResource slice that implements
+// the sort.Interface for sorting slices.
+type stringResources []stringResource
+
+func (res stringResources) Len() int           { return len(res) }
+func (res stringResources) Swap(i, j int)      { res[i], res[j] = res[j], res[i] }
+func (res stringResources) Less(i, j int) bool { return res[i].Name < res[j].Name }
 
 // defaultLocale declares the constant to identify default string resources (resources
 // in 'values' [no suffix] directory)
@@ -127,6 +136,7 @@ func main() {
 		}
 	}
 
+	sort.Sort(stringResources(report))
 	var output string
 	switch outputFormat {
 	case "json":
