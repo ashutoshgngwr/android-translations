@@ -421,12 +421,22 @@ func getLastModifiedTime(file string, lineStart, lineCount int) (time.Time, erro
 		return time.Time{}, errors.Wrapf(err, errFmt, file, lineStart, lineCount)
 	}
 
-	timestamp, err := strconv.ParseInt(strings.TrimSpace(stdoutBuffer.String()), 10, 64)
-	if err != nil {
-		return time.Time{}, errors.Wrapf(err, errFmt, file, lineStart, lineCount)
+	// should handle case where multiline blame returns multiple commits and thus
+	// multiple committer-time fields
+	output := strings.TrimSpace(stdoutBuffer.String())
+	var latestTimestamp int64
+	for _, timestampStr := range strings.Split(output, "\n") {
+		timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+		if err != nil {
+			return time.Time{}, errors.Wrapf(err, errFmt, file, lineStart, lineCount)
+		}
+
+		if timestamp > latestTimestamp {
+			latestTimestamp = timestamp
+		}
 	}
 
-	return time.Unix(timestamp, 0), nil
+	return time.Unix(latestTimestamp, 0), nil
 }
 
 // getLineRange returns the line range of the first occurrence of 'searchTerm' in
