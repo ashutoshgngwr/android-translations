@@ -20,11 +20,24 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// xmlTranslatable is a generic struct that can be embedded in other structs
+// to parse values for 'translatable' attribute
+type xmlTranslatable struct {
+	Translatable string `xml:"translatable,attr"`
+}
+
+// IsTranslatable returns false if the value of 'Translatable' attr was set
+// to 'false'. Returns true otherwise.
+func (res *xmlTranslatable) IsTranslatable() bool {
+	return !strings.EqualFold("false", res.Translatable)
+}
+
 // xmlStringResources declares data structure for unmarshalling 'resources' tag in
 // Android values XML files.
 type xmlStringResources struct {
-	xml.Name `xml:"resources"`
-	Strings  []xmlStringResource `xml:"string"`
+	xml.Name     `xml:"resources"`
+	Strings      []xmlStringResource      `xml:"string"`
+	StringArrays []xmlStringArrayResource `xml:"string-array"`
 }
 
 // xmlStringResource declares data structure for unmarshalling 'string' tags in Android
@@ -32,9 +45,15 @@ type xmlStringResources struct {
 type xmlStringResource struct {
 	Name         string    `xml:"name,attr"`
 	Value        string    `xml:",chardata"`
-	Translatable string    `xml:"translatable,attr"`
-	Locale       string    `xml:"-"`
 	LastModified time.Time `xml:"-"`
+	xmlTranslatable
+}
+
+type xmlStringArrayResource struct {
+	Name string `xml:"name,attr"`
+	// since items have only the value, we can re-use xmlStringResource struct
+	Items []xmlStringResource `xml:"item"`
+	xmlTranslatable
 }
 
 // localeStringsMap declares the type to map locales => string_name => stringResource
@@ -222,23 +241,47 @@ func findTranslatableStrings(files []string) (localeStringsMap, error) {
 		}
 
 		locale := getLocaleForValuesFile(file)
-		for _, str := range resources.Strings {
-			if !strings.EqualFold(str.Translatable, "false") {
-				if _, ok := strResources[locale]; !ok {
-					strResources[locale] = map[string]xmlStringResource{}
-				}
+		strResCount := len(resources.Strings) + len(resources.StringArrays)
+		if _, ok := strResources[locale]; !ok && strResCount > 0 {
+			strResources[locale] = map[string]xmlStringResource{}
+		}
 
-				start, count, err := getLineRange(content, str.Value)
+		for _, str := range resources.Strings {
+			if !str.IsTranslatable() {
+				continue
+			}
+
+			start, count, err := getLineRange(content, str.Value)
+			if err == nil {
+				str.LastModified, err = getLastModifiedTime(file, start, count)
+			}
+
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "warning:", err)
+				str.LastModified = time.Now()
+			}
+
+			strResources[locale][str.Name] = str
+		}
+
+		for _, strArr := range resources.StringArrays {
+			if !strArr.IsTranslatable() {
+				continue
+			}
+
+			for i, strArrItem := range strArr.Items {
+				strArrItem.Name = fmt.Sprintf("%s[%d]", strArr.Name, i)
+				start, count, err := getLineRange(content, strArrItem.Value)
 				if err == nil {
-					str.LastModified, err = getLastModifiedTime(file, start, count)
+					strArrItem.LastModified, err = getLastModifiedTime(file, start, count)
 				}
 
 				if err != nil {
 					fmt.Fprintln(os.Stderr, "warning:", err)
-					str.LastModified = time.Now()
+					strArrItem.LastModified = time.Now()
 				}
 
-				strResources[locale][str.Name] = str
+				strResources[locale][strArrItem.Name] = strArrItem
 			}
 		}
 	}
