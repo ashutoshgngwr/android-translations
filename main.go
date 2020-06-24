@@ -410,7 +410,7 @@ func setGitHubActionsOutput(key, value string) {
 // given file using 'git blame'.
 func getLastModifiedTime(file string, lineStart, lineCount int) (time.Time, error) {
 	const errFmt = "unable to find last modified time, file: %q, start: %d, count: %d"
-	const cmdFmt = "git blame -p -L %d,+%d %s | grep committer-time | grep -oP '[\\d]+$'"
+	const cmdFmt = "git blame -p -L %d,+%d %s | grep committer-time | awk '{ print $2 }'"
 
 	var stdoutBuffer bytes.Buffer
 	command := fmt.Sprintf(cmdFmt, lineStart, lineCount, filepath.Base(file))
