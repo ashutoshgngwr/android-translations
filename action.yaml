@@ -29,7 +29,7 @@ outputs:
       in requested format.
 runs:
   using: docker
-  image: docker://ashutoshgngwr/android-translations:v1.2.0
+  image: docker://ashutoshgngwr/android-translations:v1.2.1
   args:
     - --project-dir=${{ inputs.projectDir }}
     - --outdated-locales=${{ inputs.outdatedLocales }}
