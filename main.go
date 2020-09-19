@@ -20,6 +20,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// doNotTranslateFileName as recognised by the Android Developer Tools
+// http://tools.android.com/recent/non-translatablestrings
+const doNotTranslateFileName = "donottranslate.xml"
+
 // xmlTranslatable is a generic struct that can be embedded in other structs
 // to parse values for 'translatable' attribute
 type xmlTranslatable struct {
@@ -214,9 +218,14 @@ func findValuesFiles(path string) ([]string, error) {
 }
 
 // isValuesFile checks the prefix on the parent of the given path. It also checks
-// the file extension of the path. If the prefix equals 'values' and file extension
+// the file extension of the path. If the file name is equal to doNotTranslateFileName,
+// it returns false. If the prefix equals 'values' and file extension
 // equals 'xml', it returns true. False otherwise.
 func isValuesFile(path string) bool {
+	if doNotTranslateFileName == filepath.Base(path) {
+		return false
+	}
+
 	parent := filepath.Base(filepath.Dir(path))
 	return strings.HasPrefix(parent, "values") && strings.EqualFold(".xml", filepath.Ext(path))
 }
