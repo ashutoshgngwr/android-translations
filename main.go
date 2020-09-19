@@ -142,8 +142,10 @@ func main() {
 	report := make([]stringResource, 0)
 	for _, str := range defaultStrings {
 		strResource := stringResource{
-			Name:  str.Name,
-			Value: strings.TrimSpace(str.Value),
+			Name:            str.Name,
+			Value:           strings.TrimSpace(str.Value),
+			MissingLocales:  []string{},
+			OutdatedLocales: []string{},
 		}
 
 		for locale := range localeStrings {
