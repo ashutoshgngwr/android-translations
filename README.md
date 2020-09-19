@@ -83,17 +83,35 @@ The following structure is used while generating JSON reports.
 ```json
 [
   {
-    "name": "example",
-    "value": "This is an example",
+    "name": "example_1",
+    "value": "Example 1",
     "missing_locales": [
-      "hi",
-      "ru-RU"
+      "ru",
+      "pt-rBR"
     ],
     "outdated_locales": [
+      "cs",
       "de"
     ]
   },
-  "...more of the same stuff..."
+  {
+    "name": "example_2",
+    "value": "Example 2",
+    "missing_locales": [
+      "sv",
+      "de"
+    ],
+    "outdated_locales": []
+  },
+  {
+    "name": "example_2",
+    "value": "Example 3",
+    "missing_locales": [],
+    "outdated_locales": [
+      "pt-rBR",
+      "ru"
+    ]
+  }
 ]
 ```
 
